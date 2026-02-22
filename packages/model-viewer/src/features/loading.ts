@@ -33,7 +33,7 @@ const DEFAULT_KTX2_TRANSCODER_LOCATION =
     'https://www.gstatic.com/basis-universal/versioned/2021-04-15-ba1c3e4/';
 
 const DEFAULT_LOTTIE_LOADER_LOCATION =
-    'https://cdn.jsdelivr.net/npm/three@0.149.0/examples/jsm/loaders/LottieLoader.js';
+    '.183.0/examples/jsm/loaders/LottieLoader.js';
 
 const RevealStrategy: {[index: string]: RevealAttributeValue} = {
   AUTO: 'auto',
