@@ -1,4 +1,4 @@
-import { MeshNormalMaterial, Color, WebGLRenderTarget, NearestFilter, SRGBColorSpace, BasicDepthPacking, UnsignedByteType, Scene, Camera, Mesh, BackSide, DoubleSide, ShaderMaterial, FrontSide, EventDispatcher, Vector2, DepthTexture, DepthStencilFormat, UnsignedInt248Type, UnsignedIntType, LinearFilter, NoBlending, Uniform, REVISION, PerspectiveCamera, LinearSRGBColorSpace, NoColorSpace, Material, Texture, BufferGeometry, BufferAttribute, Vector4, LinearMipmapLinearFilter, Vector3, RGBAFormat, RepeatWrapping, DataTexture, LuminanceFormat, RedFormat, RGFormat, MeshDepthMaterial, RGBADepthPacking, LoadingManager, FloatType, Matrix4, EqualDepth, NotEqualDepth, LessDepth, GreaterDepth, GreaterEqualDepth, LessEqualDepth, AlwaysDepth, NeverDepth, HalfFloatType, NeutralToneMapping, NoToneMapping } from 'three';
+import { MeshNormalMaterial, Color, WebGLRenderTarget, NearestFilter, SRGBColorSpace, BasicDepthPacking, UnsignedByteType, Scene, Camera, Mesh, BackSide, DoubleSide, ShaderMaterial, FrontSide, EventDispatcher, Vector2, DepthTexture, DepthStencilFormat, UnsignedInt248Type, UnsignedIntType, LinearFilter, NoBlending, Uniform, REVISION, PerspectiveCamera, LinearSRGBColorSpace, NoColorSpace, Material, Texture, BufferGeometry, BufferAttribute, Vector4, LinearMipmapLinearFilter, Vector3, RGBAFormat, RepeatWrapping, DataTexture, RedFormat, RGFormat, MeshDepthMaterial, RGBADepthPacking, LoadingManager, FloatType, Matrix4, EqualDepth, NotEqualDepth, LessDepth, GreaterDepth, GreaterEqualDepth, LessEqualDepth, AlwaysDepth, NeverDepth, HalfFloatType, NeutralToneMapping, NoToneMapping } from 'three';
 
 /**
  * @license
@@ -4017,7 +4017,7 @@ var GlitchMode = {
 };
 function getNoise(size, format, type) {
   const channels = /* @__PURE__ */ new Map([
-    [LuminanceFormat, 1],
+    [RedFormat, 1],
     [RedFormat, 1],
     [RGFormat, 2],
     [RGBAFormat, 4]
@@ -4043,15 +4043,15 @@ var NoiseTexture = class extends DataTexture {
   /**
    * Constructs a new noise texture.
    *
-   * The texture format can be either `LuminanceFormat` or `RGBAFormat`. Additionally, the formats `RedFormat` and
+   * The texture format can be either `RedFormat` or `RGBAFormat`. Additionally, the formats `RedFormat` and
    * `RGFormat` can be used in a WebGL 2 context.
    *
    * @param {Number} width - The width.
    * @param {Number} height - The height.
-   * @param {Number} [format=LuminanceFormat] - The texture format.
+   * @param {Number} [format=RedFormat] - The texture format.
    * @param {Number} [type=UnsignedByteType] - The texture type.
    */
-  constructor(width, height, format = LuminanceFormat, type = UnsignedByteType) {
+  constructor(width, height, format = RedFormat, type = UnsignedByteType) {
     super(getNoise(width * height, format, type), width, height, format, type);
     this.needsUpdate = true;
   }
