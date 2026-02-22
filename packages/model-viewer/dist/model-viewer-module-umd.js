@@ -17955,8 +17955,9 @@ void main() {
             this.blurPlane.visible = false;
             camera.add(this.blurPlane);
             scene.target.add(this);
-            this.depthMaterial.onBeforeCompile = function(shader) {
-                shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
+            this.depthMaterial.onBeforeCompile = (shader)=>{
+                const depthLine = /gl_FragColor\s*=\s*vec4\s*\(\s*vec3\s*\(\s*1\.0\s*-\s*fragCoordZ\s*\)\s*,\s*(?:opacity|diffuseColor\.a)\s*\)\s*;/;
+                shader.fragmentShader = shader.fragmentShader.replace(depthLine, 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
             };
             this.depthMaterial.side = three.DoubleSide;
             this.horizontalBlurMaterial.depthTest = false;

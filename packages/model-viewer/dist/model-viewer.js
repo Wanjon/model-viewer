@@ -83224,8 +83224,9 @@ class Shadow extends Object3D {
         camera.add(this.blurPlane);
         scene.target.add(this);
         // like MeshDepthMaterial, but goes from black to transparent
-        this.depthMaterial.onBeforeCompile = function (shader) {
-            shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
+        this.depthMaterial.onBeforeCompile = (shader) => {
+            const depthLine = /gl_FragColor\s*=\s*vec4\s*\(\s*vec3\s*\(\s*1\.0\s*-\s*fragCoordZ\s*\)\s*,\s*(?:opacity|diffuseColor\.a)\s*\)\s*;/;
+            shader.fragmentShader = shader.fragmentShader.replace(depthLine, 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
         };
         // Render both sides, back sides face the light source and
         // front sides supply depth information for soft shadows
