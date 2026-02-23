@@ -21565,7 +21565,7 @@ configuration or device capabilities');
     const PROGRESS_BAR_UPDATE_THRESHOLD = 100;
     const DEFAULT_DRACO_DECODER_LOCATION = 'https://www.gstatic.com/draco/versioned/decoders/1.5.6/';
     const DEFAULT_KTX2_TRANSCODER_LOCATION = 'https://www.gstatic.com/basis-universal/versioned/2021-04-15-ba1c3e4/';
-    const DEFAULT_LOTTIE_LOADER_LOCATION = 'https://cdn.jsdelivr.net/npm/three@0.149.0/examples/jsm/loaders/LottieLoader.js';
+    const DEFAULT_LOTTIE_LOADER_LOCATION = 'https://cdn.jsdelivr.net/npm/three@0.183.0/examples/jsm/loaders/LottieLoader.js';
     const RevealStrategy = {
         AUTO: 'auto'};
     const LoadingStrategy = {
