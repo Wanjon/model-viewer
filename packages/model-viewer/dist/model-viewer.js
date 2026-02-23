@@ -83187,7 +83187,6 @@ class Shadow extends Object3D {
         // private cameraHelper = new CameraHelper(this.camera);
         this.renderTarget = null;
         this.renderTargetBlur = null;
-        this.depthMaterial = new MeshDepthMaterial();
         this.horizontalBlurMaterial = new ShaderMaterial(HorizontalBlurShader);
         this.verticalBlurMaterial = new ShaderMaterial(VerticalBlurShader);
         this.intensity = 0;
@@ -83223,16 +83222,20 @@ class Shadow extends Object3D {
         this.blurPlane.visible = false;
         camera.add(this.blurPlane);
         scene.target.add(this);
-        // like MeshDepthMaterial, but goes from black to transparent
-        this.depthMaterial.onBeforeCompile = (shader) => {
-            shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
-        };
-        this.depthMaterial.customProgramCacheKey = () => {
-            return 'shadow-depth';
-        };
-        // Render both sides, back sides face the light source and
-        // front sides supply depth information for soft shadows
-        this.depthMaterial.side = DoubleSide;
+        // Custom depth material: like MeshDepthMaterial but outputs
+        // black color with depth-based alpha (for soft shadow rendering).
+        // Uses ShaderLib['depth'] directly instead of onBeforeCompile to
+        // avoid shader program caching issues.
+        const depthShader = ShaderLib['depth'];
+        this.depthMaterial = new ShaderMaterial({
+            uniforms: UniformsUtils.clone(depthShader.uniforms),
+            vertexShader: depthShader.vertexShader,
+            fragmentShader: depthShader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );'),
+            defines: {
+                'DEPTH_PACKING': 3200,
+            },
+            side: DoubleSide,
+        });
         this.horizontalBlurMaterial.depthTest = false;
         this.verticalBlurMaterial.depthTest = false;
         this.setScene(scene, softness, side);
@@ -83295,7 +83298,7 @@ class Shadow extends Object3D {
         camera.near = 0;
         camera.far = lerp(hardFar, softFar, softness);
         // we have co-opted opacity to scale the depth to clip
-        this.depthMaterial.opacity = 1.0 / softness;
+        this.depthMaterial.uniforms.opacity.value = 1.0 / softness;
         camera.updateProjectionMatrix();
         // this.cameraHelper.update();
         this.setIntensity(this.intensity);

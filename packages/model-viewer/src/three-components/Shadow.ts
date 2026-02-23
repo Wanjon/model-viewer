@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import {BackSide, DoubleSide, Box3, Material, Mesh, MeshBasicMaterial, MeshDepthMaterial, NoToneMapping, Object3D, OrthographicCamera, PlaneGeometry, RenderTargetOptions, RGBAFormat, Scene, ShaderMaterial, Vector3, WebGLRenderer, WebGLRenderTarget} from 'three';
+import {BackSide, DoubleSide, Box3, Material, Mesh, MeshBasicMaterial, NoToneMapping, Object3D, OrthographicCamera, PlaneGeometry, RenderTargetOptions, RGBAFormat, Scene, ShaderLib, ShaderMaterial, UniformsUtils, Vector3, WebGLRenderer, WebGLRenderTarget} from 'three';
 import {HorizontalBlurShader} from 'three/examples/jsm/shaders/HorizontalBlurShader.js';
 import {VerticalBlurShader} from 'three/examples/jsm/shaders/VerticalBlurShader.js';
 import {lerp} from 'three/src/math/MathUtils.js';
@@ -54,7 +54,7 @@ export class Shadow extends Object3D {
   // private cameraHelper = new CameraHelper(this.camera);
   private renderTarget: WebGLRenderTarget|null = null;
   private renderTargetBlur: WebGLRenderTarget|null = null;
-  private depthMaterial = new MeshDepthMaterial();
+  private depthMaterial: ShaderMaterial;
   private horizontalBlurMaterial = new ShaderMaterial(HorizontalBlurShader);
   private verticalBlurMaterial = new ShaderMaterial(VerticalBlurShader);
   private intensity = 0;
@@ -101,18 +101,22 @@ export class Shadow extends Object3D {
 
     scene.target.add(this);
 
-    // like MeshDepthMaterial, but goes from black to transparent
-    this.depthMaterial.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
+    // Custom depth material: like MeshDepthMaterial but outputs
+    // black color with depth-based alpha (for soft shadow rendering).
+    // Uses ShaderLib['depth'] directly instead of onBeforeCompile to
+    // avoid shader program caching issues.
+    const depthShader = ShaderLib['depth'];
+    this.depthMaterial = new ShaderMaterial({
+      uniforms: UniformsUtils.clone(depthShader.uniforms),
+      vertexShader: depthShader.vertexShader,
+      fragmentShader: depthShader.fragmentShader.replace(
           'gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );',
-          'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
-    };
-    this.depthMaterial.customProgramCacheKey = () => {
-      return 'shadow-depth';
-    };
-    // Render both sides, back sides face the light source and
-    // front sides supply depth information for soft shadows
-    this.depthMaterial.side = DoubleSide;
+          'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );'),
+      defines: {
+        'DEPTH_PACKING': 3200,
+      },
+      side: DoubleSide,
+    });
 
     this.horizontalBlurMaterial.depthTest = false;
     this.verticalBlurMaterial.depthTest = false;
@@ -189,7 +193,7 @@ export class Shadow extends Object3D {
     camera.near = 0;
     camera.far = lerp(hardFar, softFar, softness);
     // we have co-opted opacity to scale the depth to clip
-    this.depthMaterial.opacity = 1.0 / softness;
+    this.depthMaterial.uniforms.opacity.value = 1.0 / softness;
     camera.updateProjectionMatrix();
     // this.cameraHelper.update();
 

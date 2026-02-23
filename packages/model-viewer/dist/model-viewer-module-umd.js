@@ -17821,7 +17821,7 @@ void main() {
             const hardFar = size.y * scaleY;
             camera.near = 0;
             camera.far = lerp(hardFar, softFar, softness);
-            this.depthMaterial.opacity = 1.0 / softness;
+            this.depthMaterial.uniforms.opacity.value = 1.0 / softness;
             camera.updateProjectionMatrix();
             this.setIntensity(this.intensity);
             this.setOffset(0);
@@ -17934,7 +17934,6 @@ void main() {
             this.camera = new three.OrthographicCamera();
             this.renderTarget = null;
             this.renderTargetBlur = null;
-            this.depthMaterial = new three.MeshDepthMaterial();
             this.horizontalBlurMaterial = new three.ShaderMaterial(HorizontalBlurShader);
             this.verticalBlurMaterial = new three.ShaderMaterial(VerticalBlurShader);
             this.intensity = 0;
@@ -17964,13 +17963,16 @@ void main() {
             this.blurPlane.visible = false;
             camera.add(this.blurPlane);
             scene.target.add(this);
-            this.depthMaterial.onBeforeCompile = (shader)=>{
-                shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
-            };
-            this.depthMaterial.customProgramCacheKey = ()=>{
-                return 'shadow-depth';
-            };
-            this.depthMaterial.side = three.DoubleSide;
+            const depthShader = three.ShaderLib['depth'];
+            this.depthMaterial = new three.ShaderMaterial({
+                uniforms: three.UniformsUtils.clone(depthShader.uniforms),
+                vertexShader: depthShader.vertexShader,
+                fragmentShader: depthShader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );'),
+                defines: {
+                    'DEPTH_PACKING': 3200
+                },
+                side: three.DoubleSide
+            });
             this.horizontalBlurMaterial.depthTest = false;
             this.verticalBlurMaterial.depthTest = false;
             this.setScene(scene, softness, side);
