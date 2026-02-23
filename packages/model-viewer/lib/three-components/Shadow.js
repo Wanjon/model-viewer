@@ -106,8 +106,8 @@ void main() {
 
 	float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;
 
-	// DIAGNOSTIC: output bright red to verify shader is running
-	gl_FragColor = vec4( 1.0, 0.0, 0.0, ( 1.0 - fragCoordZ ) * opacity );
+	// Output black color with depth-based alpha for shadow rendering
+	gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );
 
 }
 `;
@@ -314,9 +314,12 @@ export class Shadow extends Object3D {
         // this.cameraHelper.visible = false;
         // force the depthMaterial to everything
         scene.overrideMaterial = this.depthMaterial;
-        // set renderer clear alpha
+        // set renderer clear alpha and ensure autoClear is on
+        // (effectRenderer may have set autoClear = false)
         const initialClearAlpha = renderer.getClearAlpha();
+        const initialAutoClear = renderer.autoClear;
         renderer.setClearAlpha(0);
+        renderer.autoClear = true;
         this.floor.visible = false;
         // Temporarily remove scene background and environment so they don't
         // get rendered into the shadow render target
@@ -344,6 +347,7 @@ export class Shadow extends Object3D {
         scene.background = initialBackground;
         scene.environment = initialEnvironment;
         renderer.toneMapping = initialToneMapping;
+        renderer.autoClear = initialAutoClear;
         // this.cameraHelper.visible = true;
     }
     blurShadow(renderer) {

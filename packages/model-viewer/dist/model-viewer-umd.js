@@ -59067,8 +59067,8 @@ void main() {
 
 	float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;
 
-	// DIAGNOSTIC: output bright red to verify shader is running
-	gl_FragColor = vec4( 1.0, 0.0, 0.0, ( 1.0 - fragCoordZ ) * opacity );
+	// Output black color with depth-based alpha for shadow rendering
+	gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );
 
 }
 `;
@@ -59181,7 +59181,9 @@ void main() {
 	    render(renderer, scene) {
 	        scene.overrideMaterial = this.depthMaterial;
 	        const initialClearAlpha = renderer.getClearAlpha();
+	        const initialAutoClear = renderer.autoClear;
 	        renderer.setClearAlpha(0);
+	        renderer.autoClear = true;
 	        this.floor.visible = false;
 	        const initialBackground = scene.background;
 	        const initialEnvironment = scene.environment;
@@ -59203,6 +59205,7 @@ void main() {
 	        scene.background = initialBackground;
 	        scene.environment = initialEnvironment;
 	        renderer.toneMapping = initialToneMapping;
+	        renderer.autoClear = initialAutoClear;
 	    }
 	    blurShadow(renderer) {
 	        const { camera, horizontalBlurMaterial, verticalBlurMaterial, renderTarget, renderTargetBlur, blurPlane } = this;
