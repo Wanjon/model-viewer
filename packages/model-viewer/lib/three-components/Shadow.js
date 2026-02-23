@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { BackSide, DoubleSide, Box3, Mesh, MeshBasicMaterial, NoToneMapping, Object3D, OrthographicCamera, PlaneGeometry, RGBAFormat, ShaderMaterial, Vector3, WebGLRenderTarget } from 'three';
+import { BackSide, Color, DoubleSide, Box3, Mesh, MeshBasicMaterial, NoToneMapping, Object3D, OrthographicCamera, PlaneGeometry, RGBAFormat, ShaderMaterial, Vector3, WebGLRenderTarget } from 'three';
 import { HorizontalBlurShader } from 'three/examples/jsm/shaders/HorizontalBlurShader.js';
 import { VerticalBlurShader } from 'three/examples/jsm/shaders/VerticalBlurShader.js';
 import { lerp } from 'three/src/math/MathUtils.js';
@@ -29,88 +29,6 @@ const ANIMATION_SCALING = 2;
 // default intensity to make them more perceptually similar to the intensity of
 // the soft shadows.
 const DEFAULT_HARD_INTENSITY = 0.3;
-// Custom shadow depth vertex shader (based on Three.js depth shader,
-// supports skinning and morph targets for animated models)
-const shadowDepthVertexShader = /* glsl */ `
-#include <common>
-#include <batching_pars_vertex>
-#include <uv_pars_vertex>
-#include <displacementmap_pars_vertex>
-#include <morphtarget_pars_vertex>
-#include <skinning_pars_vertex>
-#include <logdepthbuf_pars_vertex>
-#include <clipping_planes_pars_vertex>
-
-varying vec2 vHighPrecisionZW;
-
-void main() {
-
-	#include <uv_vertex>
-
-	#include <batching_vertex>
-	#include <skinbase_vertex>
-
-	#include <morphinstance_vertex>
-
-	#ifdef USE_DISPLACEMENTMAP
-
-		#include <beginnormal_vertex>
-		#include <morphnormal_vertex>
-		#include <skinnormal_vertex>
-
-	#endif
-
-	#include <begin_vertex>
-	#include <morphtarget_vertex>
-	#include <skinning_vertex>
-	#include <displacementmap_vertex>
-	#include <project_vertex>
-	#include <logdepthbuf_vertex>
-	#include <clipping_planes_vertex>
-
-	vHighPrecisionZW = gl_Position.zw;
-
-}
-`;
-// Custom shadow depth fragment shader: outputs black with depth-based alpha.
-// This is the key difference from the standard depth shader which outputs
-// grayscale depth as RGB. We need black RGB + alpha for shadow compositing.
-const shadowDepthFragmentShader = /* glsl */ `
-uniform float opacity;
-
-#include <common>
-#include <packing>
-#include <uv_pars_fragment>
-#include <map_pars_fragment>
-#include <alphamap_pars_fragment>
-#include <alphatest_pars_fragment>
-#include <alphahash_pars_fragment>
-#include <logdepthbuf_pars_fragment>
-#include <clipping_planes_pars_fragment>
-
-varying vec2 vHighPrecisionZW;
-
-void main() {
-
-	vec4 diffuseColor = vec4( 1.0 );
-	#include <clipping_planes_fragment>
-
-	diffuseColor.a = opacity;
-
-	#include <map_fragment>
-	#include <alphamap_fragment>
-	#include <alphatest_fragment>
-	#include <alphahash_fragment>
-
-	#include <logdepthbuf_fragment>
-
-	float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;
-
-	// Output black color with depth-based alpha for shadow rendering
-	gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );
-
-}
-`;
 /**
  * The Shadow class creates a shadow that fits a given scene and follows a
  * target. This shadow will follow the scene without any updates needed so long
@@ -166,15 +84,11 @@ export class Shadow extends Object3D {
         this.blurPlane.visible = false;
         camera.add(this.blurPlane);
         scene.target.add(this);
-        // Custom depth material: outputs black with depth-based alpha
-        // for soft shadow rendering. Uses fully custom shaders to avoid
-        // any onBeforeCompile or string replacement issues.
-        this.depthMaterial = new ShaderMaterial({
-            uniforms: {
-                opacity: { value: 1.0 },
-            },
-            vertexShader: shadowDepthVertexShader,
-            fragmentShader: shadowDepthFragmentShader,
+        // Shadow override material: renders a solid black silhouette.
+        // The shadow is created by rendering the scene from above with this
+        // material, then blurring the result for soft edges.
+        this.depthMaterial = new MeshBasicMaterial({
+            color: 0x000000,
             side: DoubleSide,
         });
         this.horizontalBlurMaterial.depthTest = false;
@@ -238,8 +152,6 @@ export class Shadow extends Object3D {
         const hardFar = size.y * scaleY;
         camera.near = 0;
         camera.far = lerp(hardFar, softFar, softness);
-        // we have co-opted opacity to scale the depth to clip
-        this.depthMaterial.uniforms.opacity.value = 1.0 / softness;
         camera.updateProjectionMatrix();
         // this.cameraHelper.update();
         this.setIntensity(this.intensity);
@@ -312,42 +224,42 @@ export class Shadow extends Object3D {
     }
     render(renderer, scene) {
         // this.cameraHelper.visible = false;
-        // force the depthMaterial to everything
-        scene.overrideMaterial = this.depthMaterial;
-        // set renderer clear alpha and ensure autoClear is on
-        // (effectRenderer may have set autoClear = false)
+        // Save ALL renderer state we will modify
+        const initialClearColor = new Color();
+        renderer.getClearColor(initialClearColor);
         const initialClearAlpha = renderer.getClearAlpha();
         const initialAutoClear = renderer.autoClear;
-        renderer.setClearAlpha(0);
-        renderer.autoClear = true;
-        this.floor.visible = false;
-        // Temporarily remove scene background and environment so they don't
-        // get rendered into the shadow render target
         const initialBackground = scene.background;
         const initialEnvironment = scene.environment;
         const initialToneMapping = renderer.toneMapping;
+        const xrEnabled = renderer.xr.enabled;
+        const oldRenderTarget = renderer.getRenderTarget();
+        // Prepare: override material, hide floor, strip scene state
+        scene.overrideMaterial = this.depthMaterial;
+        this.floor.visible = false;
         scene.background = null;
         scene.environment = null;
         renderer.toneMapping = NoToneMapping;
-        // disable XR for offscreen rendering
-        const xrEnabled = renderer.xr.enabled;
         renderer.xr.enabled = false;
-        // render to the render target to get the depths
-        const oldRenderTarget = renderer.getRenderTarget();
+        // EXPLICIT clear to transparent black — do NOT rely on autoClear
+        // (effectRenderer may have corrupted autoClear/autoClearColor state)
+        renderer.autoClear = false;
+        renderer.setClearColor(0x000000, 0);
         renderer.setRenderTarget(this.renderTarget);
+        renderer.clear();
         renderer.render(scene, this.camera);
-        // and reset the override material
+        // Reset override and blur
         scene.overrideMaterial = null;
         this.floor.visible = true;
         this.blurShadow(renderer);
-        // reset and render the normal scene
+        // Restore ALL state
         renderer.xr.enabled = xrEnabled;
         renderer.setRenderTarget(oldRenderTarget);
-        renderer.setClearAlpha(initialClearAlpha);
+        renderer.setClearColor(initialClearColor, initialClearAlpha);
+        renderer.autoClear = initialAutoClear;
         scene.background = initialBackground;
         scene.environment = initialEnvironment;
         renderer.toneMapping = initialToneMapping;
-        renderer.autoClear = initialAutoClear;
         // this.cameraHelper.visible = true;
     }
     blurShadow(renderer) {
@@ -358,6 +270,7 @@ export class Shadow extends Object3D {
         horizontalBlurMaterial.uniforms.h.value = 1 / this.renderTarget.width;
         horizontalBlurMaterial.uniforms.tDiffuse.value = this.renderTarget.texture;
         renderer.setRenderTarget(renderTargetBlur);
+        renderer.clear();
         renderer.render(blurPlane, camera);
         // blur vertically and draw in the main renderTarget
         blurPlane.material = verticalBlurMaterial;
@@ -365,6 +278,7 @@ export class Shadow extends Object3D {
         verticalBlurMaterial.uniforms.tDiffuse.value =
             this.renderTargetBlur.texture;
         renderer.setRenderTarget(renderTarget);
+        renderer.clear();
         renderer.render(blurPlane, camera);
         blurPlane.visible = false;
     }
