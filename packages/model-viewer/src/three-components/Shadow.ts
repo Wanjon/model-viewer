@@ -51,7 +51,6 @@ const DEFAULT_HARD_INTENSITY = 0.3;
  */
 export class Shadow extends Object3D {
   private camera = new OrthographicCamera();
-  // private cameraHelper = new CameraHelper(this.camera);
   private renderTarget: WebGLRenderTarget|null = null;
   private renderTargetBlur: WebGLRenderTarget|null = null;
   private depthMaterial: MeshBasicMaterial;
@@ -78,14 +77,8 @@ export class Shadow extends Object3D {
     camera.top = 0.5;
     this.add(camera);
 
-    // this.add(this.cameraHelper);
-    // this.cameraHelper.updateMatrixWorld = function() {
-    //   this.matrixWorld = this.camera.matrixWorld;
-    // };
-
     const plane = new PlaneGeometry();
     const shadowMaterial = new MeshBasicMaterial({
-      // color: new Color(1, 0, 0),
       opacity: 1,
       transparent: true,
       side: BackSide,
@@ -94,16 +87,12 @@ export class Shadow extends Object3D {
     this.floor.userData.noHit = true;
     camera.add(this.floor);
 
-    // the plane onto which to blur the texture
     this.blurPlane = new Mesh(plane);
     this.blurPlane.visible = false;
     camera.add(this.blurPlane);
 
     scene.target.add(this);
 
-    // Shadow override material: renders a solid black silhouette.
-    // The shadow is created by rendering the scene from above with this
-    // material, then blurring the result for soft edges.
     this.depthMaterial = new MeshBasicMaterial({
       color: 0x000000,
       side: DoubleSide,
@@ -115,10 +104,6 @@ export class Shadow extends Object3D {
     this.setScene(scene, softness, side);
   }
 
-  /**
-   * Update the shadow's size and position for a new scene. Softness is also
-   * needed, as this controls the shadow's resolution.
-   */
   setScene(scene: ModelScene, softness: number, side: Side) {
     const {boundingBox, size, rotation, position} = this;
 
@@ -162,10 +147,6 @@ export class Shadow extends Object3D {
     this.setSoftness(softness);
   }
 
-  /**
-   * Update the shadow's resolution based on softness (between 0 and 1). Should
-   * not be called frequently, as this results in reallocation.
-   */
   setSoftness(softness: number) {
     this.softness = softness;
     const {size, camera} = this;
@@ -184,15 +165,11 @@ export class Shadow extends Object3D {
     camera.near = 0;
     camera.far = lerp(hardFar, softFar, softness);
     camera.updateProjectionMatrix();
-    // this.cameraHelper.update();
 
     this.setIntensity(this.intensity);
     this.setOffset(0);
   }
 
-  /**
-   * Lower-level version of the above function.
-   */
   setMapSize(maxMapSize: number) {
     const {size} = this;
 
@@ -204,7 +181,6 @@ export class Shadow extends Object3D {
         Math.floor(size.x > size.z ? maxMapSize : maxMapSize * size.x / size.z);
     const baseHeight =
         Math.floor(size.x > size.z ? maxMapSize * size.z / size.x : maxMapSize);
-    // width of blur filter in pixels (not adjustable)
     const TAP_WIDTH = 10;
     const width = TAP_WIDTH + baseWidth;
     const height = TAP_WIDTH + baseHeight;
@@ -227,7 +203,6 @@ export class Shadow extends Object3D {
           this.renderTarget.texture;
     }
 
-    // These pads account for the softening radius around the shadow.
     this.camera.scale.set(
         size.x * (1 + TAP_WIDTH / baseWidth),
         size.z * (1 + TAP_WIDTH / baseHeight),
@@ -235,10 +210,6 @@ export class Shadow extends Object3D {
     this.needsUpdate = true;
   }
 
-  /**
-   * Set the shadow's intensity (0 to 1), which is just its opacity. Turns off
-   * shadow rendering if zero.
-   */
   setIntensity(intensity: number) {
     this.intensity = intensity;
     if (intensity > 0) {
@@ -256,12 +227,6 @@ export class Shadow extends Object3D {
     return this.intensity;
   }
 
-  /**
-   * An offset can be specified to move the
-   * shadow vertically relative to the bottom of the scene. Positive is up, so
-   * values are generally negative. A small offset keeps our shadow from
-   * z-fighting with any baked-in shadow plane.
-   */
   setOffset(offset: number) {
     this.floor.position.z = -offset + this.gap();
   }
@@ -271,9 +236,6 @@ export class Shadow extends Object3D {
   }
 
   render(renderer: WebGLRenderer, scene: Scene) {
-    // this.cameraHelper.visible = false;
-
-    // Save ALL renderer state we will modify
     const initialClearColor = new Color();
     renderer.getClearColor(initialClearColor);
     const initialClearAlpha = renderer.getClearAlpha();
@@ -284,7 +246,6 @@ export class Shadow extends Object3D {
     const xrEnabled = renderer.xr.enabled;
     const oldRenderTarget = renderer.getRenderTarget();
 
-    // Prepare: override material, hide floor, strip scene state
     scene.overrideMaterial = this.depthMaterial;
     this.floor.visible = false;
     scene.background = null;
@@ -292,21 +253,20 @@ export class Shadow extends Object3D {
     renderer.toneMapping = NoToneMapping;
     renderer.xr.enabled = false;
 
-    // EXPLICIT clear to transparent black — do NOT rely on autoClear
-    // (effectRenderer may have corrupted autoClear/autoClearColor state)
     renderer.autoClear = false;
+    const glState = (renderer as any).state;
+    glState.buffers.color.setMask(true);
+    glState.buffers.depth.setMask(true);
     renderer.setClearColor(0x000000, 0);
     renderer.setRenderTarget(this.renderTarget);
     renderer.clear();
     renderer.render(scene, this.camera);
 
-    // Reset override and blur
     scene.overrideMaterial = null;
     this.floor.visible = true;
 
     this.blurShadow(renderer);
 
-    // Restore ALL state
     renderer.xr.enabled = xrEnabled;
     renderer.setRenderTarget(oldRenderTarget);
     renderer.setClearColor(initialClearColor, initialClearAlpha);
@@ -314,7 +274,6 @@ export class Shadow extends Object3D {
     scene.background = initialBackground;
     scene.environment = initialEnvironment;
     renderer.toneMapping = initialToneMapping;
-    // this.cameraHelper.visible = true;
   }
 
   blurShadow(renderer: WebGLRenderer) {
@@ -328,22 +287,22 @@ export class Shadow extends Object3D {
     } = this;
     blurPlane.visible = true;
 
-    // blur horizontally and draw in the renderTargetBlur
     blurPlane.material = horizontalBlurMaterial;
     horizontalBlurMaterial.uniforms.h.value = 1 / this.renderTarget!.width;
     horizontalBlurMaterial.uniforms.tDiffuse.value = this.renderTarget!.texture;
 
     renderer.setRenderTarget(renderTargetBlur);
+    (renderer as any).state.buffers.color.setMask(true);
     renderer.clear();
     renderer.render(blurPlane, camera);
 
-    // blur vertically and draw in the main renderTarget
     blurPlane.material = verticalBlurMaterial;
     verticalBlurMaterial.uniforms.v.value = 1 / this.renderTarget!.height;
     verticalBlurMaterial.uniforms.tDiffuse.value =
         this.renderTargetBlur!.texture;
 
     renderer.setRenderTarget(renderTarget);
+    (renderer as any).state.buffers.color.setMask(true);
     renderer.clear();
     renderer.render(blurPlane, camera);
 

@@ -58996,7 +58996,7 @@ void main() {
 	const ANIMATION_SCALING = 2;
 	const DEFAULT_HARD_INTENSITY = 0.3;
 	 class Shadow extends Object3D {
-	 setScene(scene, softness, side) {
+	    setScene(scene, softness, side) {
 	        const { boundingBox, size, rotation, position } = this;
 	        this.isAnimated = scene.animationNames.length > 0;
 	        this.boundingBox.copy(scene.boundingBox);
@@ -59039,7 +59039,7 @@ void main() {
 	        }
 	        this.setSoftness(softness);
 	    }
-	 setSoftness(softness) {
+	    setSoftness(softness) {
 	        this.softness = softness;
 	        const { size, camera } = this;
 	        const scaleY = this.isAnimated ? ANIMATION_SCALING : 1;
@@ -59053,7 +59053,7 @@ void main() {
 	        this.setIntensity(this.intensity);
 	        this.setOffset(0);
 	    }
-	 setMapSize(maxMapSize) {
+	    setMapSize(maxMapSize) {
 	        const { size } = this;
 	        if (this.isAnimated) {
 	            maxMapSize *= ANIMATION_SCALING;
@@ -59080,7 +59080,7 @@ void main() {
 	        this.camera.scale.set(size.x * (1 + TAP_WIDTH / baseWidth), size.z * (1 + TAP_WIDTH / baseHeight), 1);
 	        this.needsUpdate = true;
 	    }
-	 setIntensity(intensity) {
+	    setIntensity(intensity) {
 	        this.intensity = intensity;
 	        if (intensity > 0) {
 	            this.visible = true;
@@ -59094,7 +59094,7 @@ void main() {
 	    getIntensity() {
 	        return this.intensity;
 	    }
-	 setOffset(offset) {
+	    setOffset(offset) {
 	        this.floor.position.z = -offset + this.gap();
 	    }
 	    gap() {
@@ -59117,6 +59117,9 @@ void main() {
 	        renderer.toneMapping = NoToneMapping;
 	        renderer.xr.enabled = false;
 	        renderer.autoClear = false;
+	        const glState = renderer.state;
+	        glState.buffers.color.setMask(true);
+	        glState.buffers.depth.setMask(true);
 	        renderer.setClearColor(0x000000, 0);
 	        renderer.setRenderTarget(this.renderTarget);
 	        renderer.clear();
@@ -59139,12 +59142,14 @@ void main() {
 	        horizontalBlurMaterial.uniforms.h.value = 1 / this.renderTarget.width;
 	        horizontalBlurMaterial.uniforms.tDiffuse.value = this.renderTarget.texture;
 	        renderer.setRenderTarget(renderTargetBlur);
+	        renderer.state.buffers.color.setMask(true);
 	        renderer.clear();
 	        renderer.render(blurPlane, camera);
 	        blurPlane.material = verticalBlurMaterial;
 	        verticalBlurMaterial.uniforms.v.value = 1 / this.renderTarget.height;
 	        verticalBlurMaterial.uniforms.tDiffuse.value = this.renderTargetBlur.texture;
 	        renderer.setRenderTarget(renderTarget);
+	        renderer.state.buffers.color.setMask(true);
 	        renderer.clear();
 	        renderer.render(blurPlane, camera);
 	        blurPlane.visible = false;

@@ -504,32 +504,11 @@ declare class Shadow extends Object3D {
     private isAnimated;
     needsUpdate: boolean;
     constructor(scene: ModelScene, softness: number, side: Side);
-    /**
-     * Update the shadow's size and position for a new scene. Softness is also
-     * needed, as this controls the shadow's resolution.
-     */
     setScene(scene: ModelScene, softness: number, side: Side): void;
-    /**
-     * Update the shadow's resolution based on softness (between 0 and 1). Should
-     * not be called frequently, as this results in reallocation.
-     */
     setSoftness(softness: number): void;
-    /**
-     * Lower-level version of the above function.
-     */
     setMapSize(maxMapSize: number): void;
-    /**
-     * Set the shadow's intensity (0 to 1), which is just its opacity. Turns off
-     * shadow rendering if zero.
-     */
     setIntensity(intensity: number): void;
     getIntensity(): number;
-    /**
-     * An offset can be specified to move the
-     * shadow vertically relative to the bottom of the scene. Positive is up, so
-     * values are generally negative. A small offset keeps our shadow from
-     * z-fighting with any baked-in shadow plane.
-     */
     setOffset(offset: number): void;
     gap(): number;
     render(renderer: WebGLRenderer, scene: Scene$1): void;
