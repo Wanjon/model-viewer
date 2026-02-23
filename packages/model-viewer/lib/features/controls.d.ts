@@ -55,7 +55,7 @@ export declare const fieldOfViewIntrinsics: () => {
     };
 };
 export declare const cameraOrbitIntrinsics: (element: ModelViewerElementBase) => {
-    basis: (NumberNode<"m"> | NumberNode<"rad">)[];
+    basis: (NumberNode<"rad"> | NumberNode<"m">)[];
     keywords: {
         auto: (NumberNode<"%"> | null)[];
     };
