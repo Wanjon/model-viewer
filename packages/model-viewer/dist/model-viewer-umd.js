@@ -59107,7 +59107,11 @@ void main() {
 	        renderer.setClearAlpha(0);
 	        this.floor.visible = false;
 	        const initialBackground = scene.background;
+	        const initialEnvironment = scene.environment;
+	        const initialToneMapping = renderer.toneMapping;
 	        scene.background = null;
+	        scene.environment = null;
+	        renderer.toneMapping = NoToneMapping;
 	        const xrEnabled = renderer.xr.enabled;
 	        renderer.xr.enabled = false;
 	        const oldRenderTarget = renderer.getRenderTarget();
@@ -59120,6 +59124,8 @@ void main() {
 	        renderer.setRenderTarget(oldRenderTarget);
 	        renderer.setClearAlpha(initialClearAlpha);
 	        scene.background = initialBackground;
+	        scene.environment = initialEnvironment;
+	        renderer.toneMapping = initialToneMapping;
 	    }
 	    blurShadow(renderer) {
 	        const { camera, horizontalBlurMaterial, verticalBlurMaterial, renderTarget, renderTargetBlur, blurPlane } = this;
@@ -59187,8 +59193,10 @@ void main() {
 	        camera.add(this.blurPlane);
 	        scene.target.add(this);
 	        this.depthMaterial.onBeforeCompile = (shader)=>{
-	            const depthLine = /gl_FragColor\s*=\s*vec4\s*\(\s*vec3\s*\(\s*1\.0\s*-\s*fragCoordZ\s*\)\s*,\s*(?:opacity|diffuseColor\.a)\s*\)\s*;/;
-	            shader.fragmentShader = shader.fragmentShader.replace(depthLine, 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
+	            shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
+	        };
+	        this.depthMaterial.customProgramCacheKey = ()=>{
+	            return 'shadow-depth';
 	        };
 	        this.depthMaterial.side = DoubleSide;
 	        this.horizontalBlurMaterial.depthTest = false;

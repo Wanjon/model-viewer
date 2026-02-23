@@ -22465,8 +22465,10 @@ class Shadow extends Object3D {
         scene.target.add(this);
         // like MeshDepthMaterial, but goes from black to transparent
         this.depthMaterial.onBeforeCompile = (shader) => {
-            const depthLine = /gl_FragColor\s*=\s*vec4\s*\(\s*vec3\s*\(\s*1\.0\s*-\s*fragCoordZ\s*\)\s*,\s*(?:opacity|diffuseColor\.a)\s*\)\s*;/;
-            shader.fragmentShader = shader.fragmentShader.replace(depthLine, 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
+            shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );');
+        };
+        this.depthMaterial.customProgramCacheKey = () => {
+            return 'shadow-depth';
         };
         // Render both sides, back sides face the light source and
         // front sides supply depth information for soft shadows
@@ -22612,10 +22614,14 @@ class Shadow extends Object3D {
         const initialClearAlpha = renderer.getClearAlpha();
         renderer.setClearAlpha(0);
         this.floor.visible = false;
-        // Temporarily remove scene background so it doesn't get rendered into
-        // the shadow render target (which would override the clear alpha to 1)
+        // Temporarily remove scene background and environment so they don't
+        // get rendered into the shadow render target
         const initialBackground = scene.background;
+        const initialEnvironment = scene.environment;
+        const initialToneMapping = renderer.toneMapping;
         scene.background = null;
+        scene.environment = null;
+        renderer.toneMapping = NoToneMapping;
         // disable XR for offscreen rendering
         const xrEnabled = renderer.xr.enabled;
         renderer.xr.enabled = false;
@@ -22632,6 +22638,8 @@ class Shadow extends Object3D {
         renderer.setRenderTarget(oldRenderTarget);
         renderer.setClearAlpha(initialClearAlpha);
         scene.background = initialBackground;
+        scene.environment = initialEnvironment;
+        renderer.toneMapping = initialToneMapping;
         // this.cameraHelper.visible = true;
     }
     blurShadow(renderer) {
