@@ -17878,6 +17878,8 @@ void main() {
             const initialClearAlpha = renderer.getClearAlpha();
             renderer.setClearAlpha(0);
             this.floor.visible = false;
+            const initialBackground = scene.background;
+            scene.background = null;
             const xrEnabled = renderer.xr.enabled;
             renderer.xr.enabled = false;
             const oldRenderTarget = renderer.getRenderTarget();
@@ -17889,6 +17891,7 @@ void main() {
             renderer.xr.enabled = xrEnabled;
             renderer.setRenderTarget(oldRenderTarget);
             renderer.setClearAlpha(initialClearAlpha);
+            scene.background = initialBackground;
         }
         blurShadow(renderer) {
             const { camera, horizontalBlurMaterial, verticalBlurMaterial, renderTarget, renderTargetBlur, blurPlane } = this;

@@ -234,6 +234,10 @@ export class Shadow extends Object3D {
         const initialClearAlpha = renderer.getClearAlpha();
         renderer.setClearAlpha(0);
         this.floor.visible = false;
+        // Temporarily remove scene background so it doesn't get rendered into
+        // the shadow render target (which would override the clear alpha to 1)
+        const initialBackground = scene.background;
+        scene.background = null;
         // disable XR for offscreen rendering
         const xrEnabled = renderer.xr.enabled;
         renderer.xr.enabled = false;
@@ -249,6 +253,7 @@ export class Shadow extends Object3D {
         renderer.xr.enabled = xrEnabled;
         renderer.setRenderTarget(oldRenderTarget);
         renderer.setClearAlpha(initialClearAlpha);
+        scene.background = initialBackground;
         // this.cameraHelper.visible = true;
     }
     blurShadow(renderer) {
