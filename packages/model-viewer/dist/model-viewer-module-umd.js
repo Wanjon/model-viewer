@@ -17767,6 +17767,83 @@ void main() {
     const LOG_MIN_RESOLUTION = 6;
     const ANIMATION_SCALING = 2;
     const DEFAULT_HARD_INTENSITY = 0.3;
+    const shadowDepthVertexShader =  `
+#include <common>
+#include <batching_pars_vertex>
+#include <uv_pars_vertex>
+#include <displacementmap_pars_vertex>
+#include <morphtarget_pars_vertex>
+#include <skinning_pars_vertex>
+#include <logdepthbuf_pars_vertex>
+#include <clipping_planes_pars_vertex>
+
+varying vec2 vHighPrecisionZW;
+
+void main() {
+
+	#include <uv_vertex>
+
+	#include <batching_vertex>
+	#include <skinbase_vertex>
+
+	#include <morphinstance_vertex>
+
+	#ifdef USE_DISPLACEMENTMAP
+
+		#include <beginnormal_vertex>
+		#include <morphnormal_vertex>
+		#include <skinnormal_vertex>
+
+	#endif
+
+	#include <begin_vertex>
+	#include <morphtarget_vertex>
+	#include <skinning_vertex>
+	#include <displacementmap_vertex>
+	#include <project_vertex>
+	#include <logdepthbuf_vertex>
+	#include <clipping_planes_vertex>
+
+	vHighPrecisionZW = gl_Position.zw;
+
+}
+`;
+    const shadowDepthFragmentShader =  `
+uniform float opacity;
+
+#include <common>
+#include <packing>
+#include <uv_pars_fragment>
+#include <map_pars_fragment>
+#include <alphamap_pars_fragment>
+#include <alphatest_pars_fragment>
+#include <alphahash_pars_fragment>
+#include <logdepthbuf_pars_fragment>
+#include <clipping_planes_pars_fragment>
+
+varying vec2 vHighPrecisionZW;
+
+void main() {
+
+	vec4 diffuseColor = vec4( 1.0 );
+	#include <clipping_planes_fragment>
+
+	diffuseColor.a = opacity;
+
+	#include <map_fragment>
+	#include <alphamap_fragment>
+	#include <alphatest_fragment>
+	#include <alphahash_fragment>
+
+	#include <logdepthbuf_fragment>
+
+	float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;
+
+	// Output black color with depth-based alpha for shadow rendering
+	gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );
+
+}
+`;
      class Shadow extends three.Object3D {
      setScene(scene, softness, side) {
             const { boundingBox, size, rotation, position } = this;
@@ -17963,14 +18040,14 @@ void main() {
             this.blurPlane.visible = false;
             camera.add(this.blurPlane);
             scene.target.add(this);
-            const depthShader = three.ShaderLib['depth'];
             this.depthMaterial = new three.ShaderMaterial({
-                uniforms: three.UniformsUtils.clone(depthShader.uniforms),
-                vertexShader: depthShader.vertexShader,
-                fragmentShader: depthShader.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * opacity );'),
-                defines: {
-                    'DEPTH_PACKING': 3200
+                uniforms: {
+                    opacity: {
+                        value: 1.0
+                    }
                 },
+                vertexShader: shadowDepthVertexShader,
+                fragmentShader: shadowDepthFragmentShader,
                 side: three.DoubleSide
             });
             this.horizontalBlurMaterial.depthTest = false;
