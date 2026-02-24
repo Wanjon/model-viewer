@@ -254,9 +254,9 @@ export class Shadow extends Object3D {
     renderer.xr.enabled = false;
 
     renderer.autoClear = false;
-    const glState = (renderer as any).state;
-    glState.buffers.color.setMask(true);
-    glState.buffers.depth.setMask(true);
+    const gl = renderer.getContext();
+    gl.colorMask(true, true, true, true);
+    gl.depthMask(true);
     renderer.setClearColor(0x000000, 0);
     renderer.setRenderTarget(this.renderTarget);
     renderer.clear();
@@ -292,7 +292,7 @@ export class Shadow extends Object3D {
     horizontalBlurMaterial.uniforms.tDiffuse.value = this.renderTarget!.texture;
 
     renderer.setRenderTarget(renderTargetBlur);
-    (renderer as any).state.buffers.color.setMask(true);
+    renderer.getContext().colorMask(true, true, true, true);
     renderer.clear();
     renderer.render(blurPlane, camera);
 
@@ -302,7 +302,7 @@ export class Shadow extends Object3D {
         this.renderTargetBlur!.texture;
 
     renderer.setRenderTarget(renderTarget);
-    (renderer as any).state.buffers.color.setMask(true);
+    renderer.getContext().colorMask(true, true, true, true);
     renderer.clear();
     renderer.render(blurPlane, camera);
 
