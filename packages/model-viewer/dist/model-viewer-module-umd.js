@@ -17888,6 +17888,16 @@ void main() {
             scene.environment = null;
             renderer.toneMapping = three.NoToneMapping;
             renderer.xr.enabled = false;
+            const noHitMeshes = [];
+            scene.traverse((object)=>{
+                if (object.userData.noHit) {
+                    noHitMeshes.push({
+                        mesh: object,
+                        visible: object.visible
+                    });
+                    object.visible = false;
+                }
+            });
             renderer.autoClear = false;
             const gl = renderer.getContext();
             gl.colorMask(true, true, true, true);
@@ -17896,6 +17906,9 @@ void main() {
             renderer.setRenderTarget(this.renderTarget);
             renderer.clear();
             renderer.render(scene, this.camera);
+            for (const { mesh, visible } of noHitMeshes){
+                mesh.visible = visible;
+            }
             scene.overrideMaterial = null;
             this.floor.visible = true;
             this.blurShadow(renderer);

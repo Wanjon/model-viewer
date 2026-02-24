@@ -22582,6 +22582,15 @@ class Shadow extends Object3D {
         scene.environment = null;
         renderer.toneMapping = NoToneMapping;
         renderer.xr.enabled = false;
+        // Hide all meshes marked with userData.noHit (GroundedSkybox, hotspots, etc.)
+        // to prevent them from appearing in the shadow map as solid rectangles
+        const noHitMeshes = [];
+        scene.traverse((object) => {
+            if (object.userData.noHit) {
+                noHitMeshes.push({ mesh: object, visible: object.visible });
+                object.visible = false;
+            }
+        });
         renderer.autoClear = false;
         const gl = renderer.getContext();
         gl.colorMask(true, true, true, true);
@@ -22590,6 +22599,10 @@ class Shadow extends Object3D {
         renderer.setRenderTarget(this.renderTarget);
         renderer.clear();
         renderer.render(scene, this.camera);
+        // Restore visibility of noHit meshes
+        for (const { mesh, visible } of noHitMeshes) {
+            mesh.visible = visible;
+        }
         scene.overrideMaterial = null;
         this.floor.visible = true;
         this.blurShadow(renderer);
