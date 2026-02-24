@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import {BackSide, DoubleSide, Box3, Material, Mesh, MeshBasicMaterial, NoToneMapping, Object3D, OrthographicCamera, PlaneGeometry, RenderTargetOptions, RGBAFormat, Scene, ShaderMaterial, Vector3, WebGLRenderer, WebGLRenderTarget} from 'three';
+import {BackSide, Color, DoubleSide, Box3, Material, Mesh, MeshBasicMaterial, NoToneMapping, Object3D, OrthographicCamera, PlaneGeometry, RenderTargetOptions, RGBAFormat, Scene, ShaderMaterial, Vector3, WebGLRenderer, WebGLRenderTarget} from 'three';
 import {HorizontalBlurShader} from 'three/examples/jsm/shaders/HorizontalBlurShader.js';
 import {VerticalBlurShader} from 'three/examples/jsm/shaders/VerticalBlurShader.js';
 import {lerp} from 'three/src/math/MathUtils.js';
@@ -366,9 +366,13 @@ export class Shadow extends Object3D {
     // force the depthMaterial to everything
     scene.overrideMaterial = this.depthMaterial;
 
-    // set renderer clear alpha
+    const initialClearColor = new Color();
+    renderer.getClearColor(initialClearColor);
     const initialClearAlpha = renderer.getClearAlpha();
-    renderer.setClearAlpha(0);
+    const initialAutoClear = renderer.autoClear;
+
+    // set renderer clear alpha
+    renderer.setClearColor(0x000000, 0);
     this.floor.visible = false;
 
     // Temporarily remove scene background and environment so they don't
@@ -384,10 +388,31 @@ export class Shadow extends Object3D {
     const xrEnabled = renderer.xr.enabled;
     renderer.xr.enabled = false;
 
+    // Hide all meshes marked with userData.noHit (GroundedSkybox, hotspots, etc.)
+    // to prevent them from appearing in the shadow map as solid rectangles
+    const noHitMeshes: Array<{mesh: Object3D, visible: boolean}> = [];
+    scene.traverse((object: Object3D) => {
+      if (object.userData.noHit) {
+        noHitMeshes.push({mesh: object, visible: object.visible});
+        object.visible = false;
+      }
+    });
+
+    renderer.autoClear = false;
+    const gl = renderer.getContext();
+    gl.colorMask(true, true, true, true);
+    gl.depthMask(true);
+
     // render to the render target to get the depths
     const oldRenderTarget = renderer.getRenderTarget();
     renderer.setRenderTarget(this.renderTarget);
+    renderer.clear();
     renderer.render(scene, this.camera);
+
+    // Restore visibility of noHit meshes
+    for (const {mesh, visible} of noHitMeshes) {
+      mesh.visible = visible;
+    }
 
     // and reset the override material
     scene.overrideMaterial = null;
@@ -398,7 +423,8 @@ export class Shadow extends Object3D {
     // reset and render the normal scene
     renderer.xr.enabled = xrEnabled;
     renderer.setRenderTarget(oldRenderTarget);
-    renderer.setClearAlpha(initialClearAlpha);
+    renderer.setClearColor(initialClearColor, initialClearAlpha);
+    renderer.autoClear = initialAutoClear;
     scene.background = initialBackground;
     scene.environment = initialEnvironment;
     renderer.toneMapping = initialToneMapping;
@@ -422,6 +448,8 @@ export class Shadow extends Object3D {
     horizontalBlurMaterial.uniforms.tDiffuse.value = this.renderTarget!.texture;
 
     renderer.setRenderTarget(renderTargetBlur);
+    renderer.getContext().colorMask(true, true, true, true);
+    renderer.clear();
     renderer.render(blurPlane, camera);
 
     // blur vertically and draw in the main renderTarget
@@ -431,6 +459,8 @@ export class Shadow extends Object3D {
         this.renderTargetBlur!.texture;
 
     renderer.setRenderTarget(renderTarget);
+    renderer.getContext().colorMask(true, true, true, true);
+    renderer.clear();
     renderer.render(blurPlane, camera);
 
     blurPlane.visible = false;

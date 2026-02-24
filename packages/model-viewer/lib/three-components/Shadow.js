@@ -29,6 +29,88 @@ const ANIMATION_SCALING = 2;
 // default intensity to make them more perceptually similar to the intensity of
 // the soft shadows.
 const DEFAULT_HARD_INTENSITY = 0.3;
+// Custom shadow depth vertex shader (based on Three.js depth shader,
+// supports skinning and morph targets for animated models)
+const shadowDepthVertexShader = /* glsl */ `
+#include <common>
+#include <batching_pars_vertex>
+#include <uv_pars_vertex>
+#include <displacementmap_pars_vertex>
+#include <morphtarget_pars_vertex>
+#include <skinning_pars_vertex>
+#include <logdepthbuf_pars_vertex>
+#include <clipping_planes_pars_vertex>
+
+varying vec2 vHighPrecisionZW;
+
+void main() {
+
+	#include <uv_vertex>
+
+	#include <batching_vertex>
+	#include <skinbase_vertex>
+
+	#include <morphinstance_vertex>
+
+	#ifdef USE_DISPLACEMENTMAP
+
+		#include <beginnormal_vertex>
+		#include <morphnormal_vertex>
+		#include <skinnormal_vertex>
+
+	#endif
+
+	#include <begin_vertex>
+	#include <morphtarget_vertex>
+	#include <skinning_vertex>
+	#include <displacementmap_vertex>
+	#include <project_vertex>
+	#include <logdepthbuf_vertex>
+	#include <clipping_planes_vertex>
+
+	vHighPrecisionZW = gl_Position.zw;
+
+}
+`;
+// Custom shadow depth fragment shader: outputs black with depth-based alpha.
+// This is the key difference from the standard depth shader which outputs
+// grayscale depth as RGB. We need black RGB + alpha for shadow compositing.
+const shadowDepthFragmentShader = /* glsl */ `
+uniform float opacity;
+
+#include <common>
+#include <packing>
+#include <uv_pars_fragment>
+#include <map_pars_fragment>
+#include <alphamap_pars_fragment>
+#include <alphatest_pars_fragment>
+#include <alphahash_pars_fragment>
+#include <logdepthbuf_pars_fragment>
+#include <clipping_planes_pars_fragment>
+
+varying vec2 vHighPrecisionZW;
+
+void main() {
+
+	vec4 diffuseColor = vec4( 1.0 );
+	#include <clipping_planes_fragment>
+
+	diffuseColor.a = opacity;
+
+	#include <map_fragment>
+	#include <alphamap_fragment>
+	#include <alphatest_fragment>
+	#include <alphahash_fragment>
+
+	#include <logdepthbuf_fragment>
+
+	float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;
+
+	// DIAGNOSTIC: output bright red to verify shader is running
+	gl_FragColor = vec4( 1.0, 0.0, 0.0, ( 1.0 - fragCoordZ ) * opacity );
+
+}
+`;
 /**
  * The Shadow class creates a shadow that fits a given scene and follows a
  * target. This shadow will follow the scene without any updates needed so long
@@ -46,6 +128,7 @@ export class Shadow extends Object3D {
     constructor(scene, softness, side) {
         super();
         this.camera = new OrthographicCamera();
+        // private cameraHelper = new CameraHelper(this.camera);
         this.renderTarget = null;
         this.renderTargetBlur = null;
         this.horizontalBlurMaterial = new ShaderMaterial(HorizontalBlurShader);
@@ -64,8 +147,13 @@ export class Shadow extends Object3D {
         camera.bottom = -0.5;
         camera.top = 0.5;
         this.add(camera);
+        // this.add(this.cameraHelper);
+        // this.cameraHelper.updateMatrixWorld = function() {
+        //   this.matrixWorld = this.camera.matrixWorld;
+        // };
         const plane = new PlaneGeometry();
         const shadowMaterial = new MeshBasicMaterial({
+            // color: new Color(1, 0, 0),
             opacity: 1,
             transparent: true,
             side: BackSide,
@@ -73,18 +161,30 @@ export class Shadow extends Object3D {
         this.floor = new Mesh(plane, shadowMaterial);
         this.floor.userData.noHit = true;
         camera.add(this.floor);
+        // the plane onto which to blur the texture
         this.blurPlane = new Mesh(plane);
         this.blurPlane.visible = false;
         camera.add(this.blurPlane);
         scene.target.add(this);
-        this.depthMaterial = new MeshBasicMaterial({
-            color: 0x000000,
+        // Custom depth material: outputs black with depth-based alpha
+        // for soft shadow rendering. Uses fully custom shaders to avoid
+        // any onBeforeCompile or string replacement issues.
+        this.depthMaterial = new ShaderMaterial({
+            uniforms: {
+                opacity: { value: 1.0 },
+            },
+            vertexShader: shadowDepthVertexShader,
+            fragmentShader: shadowDepthFragmentShader,
             side: DoubleSide,
         });
         this.horizontalBlurMaterial.depthTest = false;
         this.verticalBlurMaterial.depthTest = false;
         this.setScene(scene, softness, side);
     }
+    /**
+     * Update the shadow's size and position for a new scene. Softness is also
+     * needed, as this controls the shadow's resolution.
+     */
     setScene(scene, softness, side) {
         const { boundingBox, size, rotation, position } = this;
         this.isAnimated = scene.animationNames.length > 0;
@@ -122,6 +222,10 @@ export class Shadow extends Object3D {
         }
         this.setSoftness(softness);
     }
+    /**
+     * Update the shadow's resolution based on softness (between 0 and 1). Should
+     * not be called frequently, as this results in reallocation.
+     */
     setSoftness(softness) {
         this.softness = softness;
         const { size, camera } = this;
@@ -134,10 +238,16 @@ export class Shadow extends Object3D {
         const hardFar = size.y * scaleY;
         camera.near = 0;
         camera.far = lerp(hardFar, softFar, softness);
+        // we have co-opted opacity to scale the depth to clip
+        this.depthMaterial.uniforms.opacity.value = 1.0 / softness;
         camera.updateProjectionMatrix();
+        // this.cameraHelper.update();
         this.setIntensity(this.intensity);
         this.setOffset(0);
     }
+    /**
+     * Lower-level version of the above function.
+     */
     setMapSize(maxMapSize) {
         const { size } = this;
         if (this.isAnimated) {
@@ -145,6 +255,7 @@ export class Shadow extends Object3D {
         }
         const baseWidth = Math.floor(size.x > size.z ? maxMapSize : maxMapSize * size.x / size.z);
         const baseHeight = Math.floor(size.x > size.z ? maxMapSize * size.z / size.x : maxMapSize);
+        // width of blur filter in pixels (not adjustable)
         const TAP_WIDTH = 10;
         const width = TAP_WIDTH + baseWidth;
         const height = TAP_WIDTH + baseHeight;
@@ -163,9 +274,14 @@ export class Shadow extends Object3D {
             this.floor.material.map =
                 this.renderTarget.texture;
         }
+        // These pads account for the softening radius around the shadow.
         this.camera.scale.set(size.x * (1 + TAP_WIDTH / baseWidth), size.z * (1 + TAP_WIDTH / baseHeight), 1);
         this.needsUpdate = true;
     }
+    /**
+     * Set the shadow's intensity (0 to 1), which is just its opacity. Turns off
+     * shadow rendering if zero.
+     */
     setIntensity(intensity) {
         this.intensity = intensity;
         if (intensity > 0) {
@@ -182,6 +298,12 @@ export class Shadow extends Object3D {
     getIntensity() {
         return this.intensity;
     }
+    /**
+     * An offset can be specified to move the
+     * shadow vertically relative to the bottom of the scene. Positive is up, so
+     * values are generally negative. A small offset keeps our shadow from
+     * z-fighting with any baked-in shadow plane.
+     */
     setOffset(offset) {
         this.floor.position.z = -offset + this.gap();
     }
@@ -189,20 +311,26 @@ export class Shadow extends Object3D {
         return 0.001 * this.maxDimension;
     }
     render(renderer, scene) {
+        // this.cameraHelper.visible = false;
+        // force the depthMaterial to everything
+        scene.overrideMaterial = this.depthMaterial;
         const initialClearColor = new Color();
         renderer.getClearColor(initialClearColor);
         const initialClearAlpha = renderer.getClearAlpha();
         const initialAutoClear = renderer.autoClear;
+        // set renderer clear alpha
+        renderer.setClearColor(0x000000, 0);
+        this.floor.visible = false;
+        // Temporarily remove scene background and environment so they don't
+        // get rendered into the shadow render target
         const initialBackground = scene.background;
         const initialEnvironment = scene.environment;
         const initialToneMapping = renderer.toneMapping;
-        const xrEnabled = renderer.xr.enabled;
-        const oldRenderTarget = renderer.getRenderTarget();
-        scene.overrideMaterial = this.depthMaterial;
-        this.floor.visible = false;
         scene.background = null;
         scene.environment = null;
         renderer.toneMapping = NoToneMapping;
+        // disable XR for offscreen rendering
+        const xrEnabled = renderer.xr.enabled;
         renderer.xr.enabled = false;
         // Hide all meshes marked with userData.noHit (GroundedSkybox, hotspots, etc.)
         // to prevent them from appearing in the shadow map as solid rectangles
@@ -217,7 +345,8 @@ export class Shadow extends Object3D {
         const gl = renderer.getContext();
         gl.colorMask(true, true, true, true);
         gl.depthMask(true);
-        renderer.setClearColor(0x000000, 0);
+        // render to the render target to get the depths
+        const oldRenderTarget = renderer.getRenderTarget();
         renderer.setRenderTarget(this.renderTarget);
         renderer.clear();
         renderer.render(scene, this.camera);
@@ -225,9 +354,11 @@ export class Shadow extends Object3D {
         for (const { mesh, visible } of noHitMeshes) {
             mesh.visible = visible;
         }
+        // and reset the override material
         scene.overrideMaterial = null;
         this.floor.visible = true;
         this.blurShadow(renderer);
+        // reset and render the normal scene
         renderer.xr.enabled = xrEnabled;
         renderer.setRenderTarget(oldRenderTarget);
         renderer.setClearColor(initialClearColor, initialClearAlpha);
@@ -235,10 +366,12 @@ export class Shadow extends Object3D {
         scene.background = initialBackground;
         scene.environment = initialEnvironment;
         renderer.toneMapping = initialToneMapping;
+        // this.cameraHelper.visible = true;
     }
     blurShadow(renderer) {
         const { camera, horizontalBlurMaterial, verticalBlurMaterial, renderTarget, renderTargetBlur, blurPlane } = this;
         blurPlane.visible = true;
+        // blur horizontally and draw in the renderTargetBlur
         blurPlane.material = horizontalBlurMaterial;
         horizontalBlurMaterial.uniforms.h.value = 1 / this.renderTarget.width;
         horizontalBlurMaterial.uniforms.tDiffuse.value = this.renderTarget.texture;
@@ -246,6 +379,7 @@ export class Shadow extends Object3D {
         renderer.getContext().colorMask(true, true, true, true);
         renderer.clear();
         renderer.render(blurPlane, camera);
+        // blur vertically and draw in the main renderTarget
         blurPlane.material = verticalBlurMaterial;
         verticalBlurMaterial.uniforms.v.value = 1 / this.renderTarget.height;
         verticalBlurMaterial.uniforms.tDiffuse.value =

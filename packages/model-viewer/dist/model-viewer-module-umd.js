@@ -17767,8 +17767,85 @@ void main() {
     const LOG_MIN_RESOLUTION = 6;
     const ANIMATION_SCALING = 2;
     const DEFAULT_HARD_INTENSITY = 0.3;
+    const shadowDepthVertexShader =  `
+#include <common>
+#include <batching_pars_vertex>
+#include <uv_pars_vertex>
+#include <displacementmap_pars_vertex>
+#include <morphtarget_pars_vertex>
+#include <skinning_pars_vertex>
+#include <logdepthbuf_pars_vertex>
+#include <clipping_planes_pars_vertex>
+
+varying vec2 vHighPrecisionZW;
+
+void main() {
+
+	#include <uv_vertex>
+
+	#include <batching_vertex>
+	#include <skinbase_vertex>
+
+	#include <morphinstance_vertex>
+
+	#ifdef USE_DISPLACEMENTMAP
+
+		#include <beginnormal_vertex>
+		#include <morphnormal_vertex>
+		#include <skinnormal_vertex>
+
+	#endif
+
+	#include <begin_vertex>
+	#include <morphtarget_vertex>
+	#include <skinning_vertex>
+	#include <displacementmap_vertex>
+	#include <project_vertex>
+	#include <logdepthbuf_vertex>
+	#include <clipping_planes_vertex>
+
+	vHighPrecisionZW = gl_Position.zw;
+
+}
+`;
+    const shadowDepthFragmentShader =  `
+uniform float opacity;
+
+#include <common>
+#include <packing>
+#include <uv_pars_fragment>
+#include <map_pars_fragment>
+#include <alphamap_pars_fragment>
+#include <alphatest_pars_fragment>
+#include <alphahash_pars_fragment>
+#include <logdepthbuf_pars_fragment>
+#include <clipping_planes_pars_fragment>
+
+varying vec2 vHighPrecisionZW;
+
+void main() {
+
+	vec4 diffuseColor = vec4( 1.0 );
+	#include <clipping_planes_fragment>
+
+	diffuseColor.a = opacity;
+
+	#include <map_fragment>
+	#include <alphamap_fragment>
+	#include <alphatest_fragment>
+	#include <alphahash_fragment>
+
+	#include <logdepthbuf_fragment>
+
+	float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;
+
+	// DIAGNOSTIC: output bright red to verify shader is running
+	gl_FragColor = vec4( 1.0, 0.0, 0.0, ( 1.0 - fragCoordZ ) * opacity );
+
+}
+`;
      class Shadow extends three.Object3D {
-        setScene(scene, softness, side) {
+     setScene(scene, softness, side) {
             const { boundingBox, size, rotation, position } = this;
             this.isAnimated = scene.animationNames.length > 0;
             this.boundingBox.copy(scene.boundingBox);
@@ -17811,7 +17888,7 @@ void main() {
             }
             this.setSoftness(softness);
         }
-        setSoftness(softness) {
+     setSoftness(softness) {
             this.softness = softness;
             const { size, camera } = this;
             const scaleY = this.isAnimated ? ANIMATION_SCALING : 1;
@@ -17821,11 +17898,12 @@ void main() {
             const hardFar = size.y * scaleY;
             camera.near = 0;
             camera.far = lerp(hardFar, softFar, softness);
+            this.depthMaterial.uniforms.opacity.value = 1.0 / softness;
             camera.updateProjectionMatrix();
             this.setIntensity(this.intensity);
             this.setOffset(0);
         }
-        setMapSize(maxMapSize) {
+     setMapSize(maxMapSize) {
             const { size } = this;
             if (this.isAnimated) {
                 maxMapSize *= ANIMATION_SCALING;
@@ -17852,7 +17930,7 @@ void main() {
             this.camera.scale.set(size.x * (1 + TAP_WIDTH / baseWidth), size.z * (1 + TAP_WIDTH / baseHeight), 1);
             this.needsUpdate = true;
         }
-        setIntensity(intensity) {
+     setIntensity(intensity) {
             this.intensity = intensity;
             if (intensity > 0) {
                 this.visible = true;
@@ -17866,27 +17944,27 @@ void main() {
         getIntensity() {
             return this.intensity;
         }
-        setOffset(offset) {
+     setOffset(offset) {
             this.floor.position.z = -offset + this.gap();
         }
         gap() {
             return 0.001 * this.maxDimension;
         }
         render(renderer, scene) {
+            scene.overrideMaterial = this.depthMaterial;
             const initialClearColor = new three.Color();
             renderer.getClearColor(initialClearColor);
             const initialClearAlpha = renderer.getClearAlpha();
             const initialAutoClear = renderer.autoClear;
+            renderer.setClearColor(0x000000, 0);
+            this.floor.visible = false;
             const initialBackground = scene.background;
             const initialEnvironment = scene.environment;
             const initialToneMapping = renderer.toneMapping;
-            const xrEnabled = renderer.xr.enabled;
-            const oldRenderTarget = renderer.getRenderTarget();
-            scene.overrideMaterial = this.depthMaterial;
-            this.floor.visible = false;
             scene.background = null;
             scene.environment = null;
             renderer.toneMapping = three.NoToneMapping;
+            const xrEnabled = renderer.xr.enabled;
             renderer.xr.enabled = false;
             const noHitMeshes = [];
             scene.traverse((object)=>{
@@ -17902,7 +17980,7 @@ void main() {
             const gl = renderer.getContext();
             gl.colorMask(true, true, true, true);
             gl.depthMask(true);
-            renderer.setClearColor(0x000000, 0);
+            const oldRenderTarget = renderer.getRenderTarget();
             renderer.setRenderTarget(this.renderTarget);
             renderer.clear();
             renderer.render(scene, this.camera);
@@ -17988,8 +18066,14 @@ void main() {
             this.blurPlane.visible = false;
             camera.add(this.blurPlane);
             scene.target.add(this);
-            this.depthMaterial = new three.MeshBasicMaterial({
-                color: 0x000000,
+            this.depthMaterial = new three.ShaderMaterial({
+                uniforms: {
+                    opacity: {
+                        value: 1.0
+                    }
+                },
+                vertexShader: shadowDepthVertexShader,
+                fragmentShader: shadowDepthFragmentShader,
                 side: three.DoubleSide
             });
             this.horizontalBlurMaterial.depthTest = false;
